@@ -10,11 +10,14 @@
  let headerPerson='';const headerKey=()=> 'rinde-excel-header:'+headerPerson;
  function loadHeader(){const person=state.person||'';if(person===headerPerson)return;headerPerson=person;let saved={};try{saved=JSON.parse(localStorage.getItem(headerKey())||'{}');}catch(e){}for(const [k]of fields)$('excel_'+k).value=saved[k]||'';if(!$('excel_type').value)$('excel_type').value=state.budget?'Fondo por rendir':'Reembolso';headerPanel.hidden=!person||person==='__all__';}
  headerPanel.addEventListener('change',()=>{if(!headerPerson)return;try{localStorage.setItem(headerKey(),JSON.stringify(Object.fromEntries(fields.map(([k])=>[k,$('excel_'+k).value]))));}catch(e){toast('No se pudieron recordar los datos del encabezado en este dispositivo.');}});
- const originalRender=render;render=function(){originalRender();loadHeader();};loadHeader();
- let snapshot=null,exportEpoch=0,fileUrl=null,working=false;
- function clearFile(){if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=null;$('excelSave').hidden=true;$('excelSave').removeAttribute('href');}
+ const history=document.createElement('details');history.className='panel';history.style.marginTop='20px';history.innerHTML='<summary style="font-weight:700;cursor:pointer">Rendiciones pagadas</summary><p>Volver a descargar un Excel del historial no registra otro pago.</p><div id="paidExports"></div>';$('boletas').after(history);
+ function renderHistory(){const box=$('paidExports');box.replaceChildren();const items=state.paidExports||[];history.hidden=!items.length;for(const batch of items){const btn=document.createElement('button');btn.type='button';btn.className='secondary full';btn.style.marginTop='8px';btn.textContent=batch.person+' · '+new Date(batch.at).toLocaleDateString('es-CL')+' · '+batch.count+' boletas · '+money(batch.total)+' · Volver a descargar';btn.onclick=()=>openPaid(batch.id);box.append(btn);}}
+ const originalRender=render;render=function(){originalRender();loadHeader();renderHistory();};loadHeader();renderHistory();
+ let snapshot=null,exportEpoch=0,fileUrl=null,working=false,prepared=null,committed=false,paying=false;
+ function clearFile(){if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=null;prepared=null;committed=false;$('excelSave').hidden=true;$('excelSave').removeAttribute('href');}
  function lock(value){dialog.querySelectorAll('input,select').forEach(el=>el.disabled=value);headerPanel.querySelectorAll('input,select').forEach(el=>el.disabled=value);}
- function reset(){exportEpoch++;snapshot=null;clearFile();lock(false);$('excelRows').replaceChildren();$('excelForm').reset();$('excelSummary').textContent='';$('excelError').textContent='';working=false;$('excelPrepare').disabled=false;}
+ function reset(){exportEpoch++;snapshot=null;clearFile();lock(false);$('excelRows').replaceChildren();$('excelForm').reset();$('excelSummary').textContent='';$('excelError').textContent='';working=false;paying=false;$('excelClose').disabled=false;$('excelPrepare').disabled=false;$('excelPrepare').hidden=false;}
+ dialog.addEventListener('cancel',e=>{if(paying)e.preventDefault();});
  $('excelClose').onclick=()=>dialog.close();dialog.addEventListener('close',reset);
  // Session cleanup also clears export details and any generated file.
  const previousClearSession=clearSession;clearSession=function(message){if(dialog.open)dialog.close();reset();return previousClearSession(message);};
@@ -35,11 +38,24 @@
   const meta=Object.fromEntries(fields.map(([k])=>[k,$('excel_'+k).value.trim()]));for(const k of ['costCenter','brand','channel','branch'])meta[k]=meta[k].split(' · ')[0];working=true;lock(true);clearFile();$('excelError').textContent='Preparando tu archivo…';$('excelPrepare').disabled=true;
   try{
    await loadScript('vendor/exceljs-4.4.0.min.js',()=>!!window.ExcelJS);
-   const wb=await RindeExcel.build(window.ExcelJS,data,meta,choices);const buffer=await wb.xlsx.writeBuffer();
+   const paymentId=newId();const wb=await RindeExcel.build(window.ExcelJS,{...data,status:'Pagado',paymentId},meta,choices);const buffer=await wb.xlsx.writeBuffer();
    if(epoch!==exportEpoch||session!==sessionEpoch)return;
    fileUrl=URL.createObjectURL(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-   const link=$('excelSave');link.href=fileUrl;link.download=`rendicion-${data.person.replace(/[^\p{L}\d]+/gu,'-')}-${today()}.xlsx`;link.hidden=false;link.focus();$('excelError').textContent='Archivo listo. Pulsa Descargar Excel para guardarlo.';
+   prepared={id:paymentId,person:data.person,budgetSeen:data.budget,ids:data.receipts.map(r=>r.id),expected:data.receipts.map(r=>[r.id,r.date,r.number,r.merchant,r.category,r.amount]),meta,choices};
+   const link=$('excelSave');link.href=fileUrl;link.download=`rendicion-pagada-${data.person.replace(/[^\p{L}\d]+/gu,'-')}-${today()}.xlsx`;link.textContent='↓ Descargar Excel y marcar pagado';link.hidden=false;link.focus();$('excelError').textContent='Al pulsar Descargar, estas boletas pasarán a Pagado y tu fondo quedará en cero. Se conservará una copia en el historial.';
   }catch(err){if(epoch===exportEpoch)$('excelError').textContent=err.message||'No se pudo generar el Excel. Intenta nuevamente.';}
   finally{if(epoch===exportEpoch){working=false;lock(false);$('excelPrepare').disabled=false;}}
  };
+ $('excelSave').onclick=async e=>{
+  if(committed)return;e.preventDefault();if(paying||!prepared)return;paying=true;working=true;lock(true);setSaving(true);$('excelClose').disabled=true;$('excelPrepare').disabled=true;$('excelError').textContent='Registrando el pago antes de descargar…';const epoch=exportEpoch,session=sessionEpoch;
+  try{const next=await rpc('payExport',prepared);if(epoch!==exportEpoch||session!==sessionEpoch)return;state=next;committed=true;render();$('excelPrepare').hidden=true;$('excelSave').textContent='↓ Volver a descargar · Pagado';$('excelError').textContent='Pagado. Fondo en cero. Si el archivo no se abrió, pulsa Volver a descargar. También está en Rendiciones pagadas.';$('excelSave').click();}
+  catch(err){if(epoch===exportEpoch)$('excelError').textContent=err.message+' Puedes reintentar con este mismo botón. Si el pago ya quedó registrado, no se repetirá.';}
+  finally{if(epoch===exportEpoch){paying=false;working=false;$('excelClose').disabled=false;}setSaving(false);}
+ };
+ async function openPaid(id){
+  reset();dialog.showModal();$('excelPrepare').hidden=true;working=true;$('legacyCategoryNote').hidden=true;$('excelError').textContent='Recuperando Excel pagado…';const epoch=exportEpoch,session=sessionEpoch;
+  try{const data=await rpc('getPaidExport',{id});await loadScript('vendor/exceljs-4.4.0.min.js',()=>!!window.ExcelJS);const wb=await RindeExcel.build(window.ExcelJS,{...data,status:'Pagado'},data.meta,data.choices);const buffer=await wb.xlsx.writeBuffer();if(epoch!==exportEpoch||session!==sessionEpoch)return;
+   fileUrl=URL.createObjectURL(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));committed=true;const link=$('excelSave');link.href=fileUrl;link.download='rendicion-pagada-'+id+'.xlsx';link.textContent='↓ Descargar copia · Pagado';link.hidden=false;$('excelSummary').textContent=data.person+' · Pagado';$('excelError').textContent='Esta es una copia del pago registrado. No cambia tu fondo ni vuelve a pagar las boletas.';
+  }catch(err){if(epoch===exportEpoch)$('excelError').textContent=err.message;}finally{if(epoch===exportEpoch)working=false;}
+ }
 })();

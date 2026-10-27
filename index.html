@@ -200,8 +200,8 @@ $('slideNext').onclick=()=>{slideIndex=(slideIndex+1)%3;showSlide();};$('slidePr
 (async()=>{try{const raw=sessionStorage.getItem(SESSION_KEY);if(!raw)return;const saved=JSON.parse(raw);if(!saved.token||saved.expires<Date.now()){sessionStorage.removeItem(SESSION_KEY);return;}sessionToken=saved.token;$('accessError').textContent='Recuperando tu sesión…';await refreshCloud();$('accessError').textContent='';}catch(e){$('accessError').textContent=e.message||'Ingresa nuevamente.';}})();
 </script>
 <script src="catalogs.js?v=1"></script>
-<script src="excel-export.js?v=2"></script>
-<script src="export-ui.js?v=2"></script>
+<script src="excel-export.js?v=3"></script>
+<script src="export-ui.js?v=3"></script>
 </body>
 </html>
 
