@@ -84,7 +84,7 @@ function saveReceipt(payload,user){
   if(rows.some(row=>String(row[0])===r.id)){const previous=rows.find(row=>String(row[0])===r.id);if(String(previous[2])!==r.person)throw Error('Identificador no disponible.');return state_(book,user,r.person);} // A retry never duplicates a saved expense.
   if(rows.length>=10000)throw Error('Se alcanzó el máximo de 10.000 registros.');
   if(rows.some(row=>row[9]==='Vigente'&&String(row[4]).toLowerCase()===r.number.toLowerCase()&&String(row[5]).toLowerCase()===r.merchant.toLowerCase()))throw Error('Ya existe esta boleta para el mismo comercio.');
-  const budget=budgets_(book)[r.person]||0;if(!budget)throw Error('Define primero el fondo inicial.');
+  const budget=budgets_(book)[r.person]||0;
   if(payload.budgetSeen!==budget)throw Error('El fondo cambió desde que abriste la app. Actualiza los datos y vuelve a revisar el saldo.');
   let photo=null;
   try{

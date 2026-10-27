@@ -15,3 +15,5 @@ App móvil en GitHub Pages con cuentas personales y Google Sheets/Drive como alm
 - OCR en el navegador y sugerencia por palabras del detalle; las categorías ambiguas quedan en Otros y la elección manual se respeta.
 
 El despliegue de Apps Script ejecuta como propietario con acceso web público, pero cada acción exige una sesión válida salvo login. config.js contiene solo la URL pública. Nunca subir el archivo privado de accesos ni los scripts privados de configuración.
+
+Se admiten boletas con fondo cero; el saldo negativo indica el monto pendiente de cubrir. Cada persona tiene una pestaña automática en Sheets con su fondo, total, saldo y boletas vigentes, vinculada a los registros centrales mediante fórmulas.
