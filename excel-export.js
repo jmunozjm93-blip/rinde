@@ -9,7 +9,9 @@ const categories=[
  ['Alojamiento, Estadía y','Pasajes','61-08-001-03'],
  ['Otros','Honorarios',''],['Factura','de Gasto','']
 ];
+const keys=["Gastos generales","Artículos de oficina","Peaje, estacionamiento y combustible","Insumos computación","Alojamiento, estadía y pasajes","Otros honorarios","Factura de gasto"];
 function suggest(r){
+ const saved=keys.indexOf(r.category);if(saved>=0)return saved;
  const t=(r.merchant||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
  if(r.category==='Alimentación')return 0;
  if(r.category==='Alojamiento')return 4;
