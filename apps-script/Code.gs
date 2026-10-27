@@ -9,7 +9,7 @@ function doPost(e){
   if(!expected||typeof body.key!=='string'||body.key.length>200)return json_({ok:false,code:'UNAUTHORIZED',message:'Clave de acceso incorrecta.'});
   const digest=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,body.key).map(b=>('0'+((b+256)%256).toString(16)).slice(-2)).join('');
   if(digest!==expected)return json_({ok:false,code:'UNAUTHORIZED',message:'Clave de acceso incorrecta.'});
-  const actions={getState:getState,setBudget:setBudget,saveReceipt:saveReceipt,removeReceipt:removeReceipt,recognizePhoto:recognizePhoto};
+  const actions={getState:getState,setBudget:setBudget,saveReceipt:saveReceipt,removeReceipt:removeReceipt};
   if(!Object.prototype.hasOwnProperty.call(actions,body.action))return json_({ok:false,message:'Acción desconocida.'});
   return json_({ok:true,data:actions[body.action](body.arg)});
  }catch(err){return json_({ok:false,message:err.message||'No se pudo completar la operación.'});}
@@ -66,13 +66,4 @@ function saveReceipt(payload){
 }
 function removeReceipt(id){
  text_(id,100);return locked_(()=>{const book=book_(),sheet=receipts_(book),rows=rows_(sheet),index=rows.findIndex(r=>String(r[0])===id);if(index<0)throw Error('No se encontró la boleta. Actualiza los datos.');sheet.getRange(index+2,10).setValue('Anulada');SpreadsheetApp.flush();return state_(book);});
-}
-function recognizePhoto(attachment){
- book_(); // The signed-in user must have access to the configured spreadsheet.
- const blob=blob_(attachment);let doc;
- try{
-  doc=Drive.Files.create({name:'Rinde - lectura temporal',mimeType:'application/vnd.google-apps.document'},blob,{ocrLanguage:'es',fields:'id'});
-  const text=DocumentApp.openById(doc.id).getBody().getText();return {text:text.slice(0,100000)};
- }catch(e){throw Error('Google no pudo leer la foto. Comprueba que el servicio Drive API esté activado y prueba con una foto nítida. Puedes ingresar los datos manualmente.');}
- finally{if(doc&&doc.id){try{DriveApp.getFileById(doc.id).setTrashed(true);}catch(ignore){}}}
 }
