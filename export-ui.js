@@ -1,7 +1,7 @@
 'use strict';
 (()=>{
  const dialog=document.createElement('dialog');dialog.id='excelDialog';dialog.style.width='min(700px,calc(100% - 24px))';
- dialog.innerHTML=`<form id="excelForm"><div class="eyebrow">Formato de Comercial Depor</div><h2>Descargar rendición</h2><p id="excelSummary"></p><p>Se descargan juntos el Excel y el PDF con las fotos de las boletas (tamaño carta, 3 por hoja). Los datos del encabezado vienen del formulario y cada monto irá a la categoría guardada con su boleta.</p><div class="fields" id="excelHeader"></div><p id="legacyCategoryNote" hidden>Solo estos registros antiguos necesitan clasificación. Las nuevas boletas ya la guardan desde el formulario.</p><div id="excelRows"></div><p id="excelError" role="alert" style="color:#a32943"></p><div class="dialog-actions"><button class="secondary" type="button" id="excelClose">Cerrar</button><button class="primary" type="submit" id="excelPrepare">Preparar descarga</button><a class="primary" id="excelSave" hidden style="text-decoration:none;text-align:center">↓ Descargar Excel .xlsx</a><a class="secondary" id="excelPdfSave" hidden style="text-decoration:none;text-align:center">↓ Descargar PDF de boletas</a></div></form>`;
+ dialog.innerHTML=`<form id="excelForm"><div class="eyebrow">Formato de Comercial Depor</div><h2>Descargar rendición</h2><p id="excelSummary"></p><p>Se descargan juntos el Excel y un PDF tamaño carta con la rendición y las fotos de las boletas. En iPhone se descarga un solo PDF con todo. Los datos del encabezado vienen del formulario y cada monto irá a la categoría guardada con su boleta.</p><div class="fields" id="excelHeader"></div><p id="legacyCategoryNote" hidden>Solo estos registros antiguos necesitan clasificación. Las nuevas boletas ya la guardan desde el formulario.</p><div id="excelRows"></div><p id="excelError" role="alert" style="color:#a32943"></p><div class="dialog-actions"><button class="secondary" type="button" id="excelClose">Cerrar</button><button class="primary" type="submit" id="excelPrepare">Preparar descarga</button><a class="primary" id="excelSave" hidden style="text-decoration:none;text-align:center">↓ Descargar Excel .xlsx</a><a class="secondary" id="excelPdfSave" hidden style="text-decoration:none;text-align:center">↓ Descargar PDF de boletas</a></div></form>`;
  document.body.append(dialog);
  const fields=[['type','Tipo'],['number','N.º de rendición'],['period','Periodo'],['costCenter','Centro de costo'],['brand','Marca'],['channel','Canal'],['branch','Sucursal'],['sap','Código SAP'],['check','N.º de cheque'],['bank','Banco'],['manager','Jefe directo']];
  // Valores predeterminados del formato de oficina; los campos sin dato quedan ocultos (no se borran).
@@ -16,21 +16,25 @@
  const history=document.createElement('details');history.className='panel';history.style.marginTop='20px';history.innerHTML='<summary style="font-weight:700;cursor:pointer">Rendiciones pagadas</summary><p>Volver a descargar un Excel del historial no registra otro pago.</p><div id="paidExports"></div>';$('boletas').after(history);
  function renderHistory(){const box=$('paidExports');box.replaceChildren();const items=state.paidExports||[];history.hidden=!items.length;for(const batch of items){const btn=document.createElement('button');btn.type='button';btn.className='secondary full';btn.style.marginTop='8px';btn.textContent=batch.person+' · '+new Date(batch.at).toLocaleDateString('es-CL')+' · '+batch.count+' boletas · '+money(batch.total)+' · Volver a descargar';btn.onclick=()=>openPaid(batch.id);box.append(btn);}}
  const originalRender=render;render=function(){originalRender();loadHeader();renderHistory();};loadHeader();renderHistory();
- let snapshot=null,exportEpoch=0,fileUrl=null,working=false,prepared=null,committed=false,paying=false,pdfUrl=null,pdfName='',pdfNote='';
- // PDF de fotos de la rendición: se arma junto al Excel (antes de pagar, mientras las boletas siguen vigentes) y se descarga con el mismo botón.
- async function preparePdf(receipts,meta,person,epoch){
-  const title='Rendición'+(meta.number?' N.º '+meta.number:'')+(meta.period?' · '+meta.period:'')+' · '+person;
-  let res;try{res=await RindePdf.build({receipts,title,progress:t=>{if(epoch===exportEpoch)$('excelError').textContent=t;}});}
-  catch(e){if(e.message==='La sesión cambió.')throw e;res={blob:null,failed:receipts.length};}
+ let snapshot=null,exportEpoch=0,fileUrl=null,excelName='',working=false,prepared=null,committed=false,paying=false,pdfUrl=null,pdfName='',pdfNote='';
+ /* PDF de la rendición: la planilla con el formato del Excel y las fotos de las boletas. Se arma junto al Excel
+    (antes de pagar, mientras las boletas siguen vigentes) y se descarga con el mismo botón. */
+ async function preparePdf(sheet,epoch){
+  const {data,meta}=sheet,title='Rendición'+(meta.number?' N.º '+meta.number:'')+(meta.period?' · '+meta.period:'')+' · '+data.person;
+  let res;try{res=await RindePdf.build({receipts:data.receipts,title,sheet,progress:t=>{if(epoch===exportEpoch)$('excelError').textContent=t;}});}
+  catch(e){if(e.message==='La sesión cambió.')throw e;res={blob:null,failed:data.receipts.length};}
   if(epoch!==exportEpoch)return;
   pdfNote=RindePdf.summary(res);
-  if(res.blob){pdfUrl=URL.createObjectURL(res.blob);pdfName=`boletas-rendicion-${RindePdf.slug(meta.number||'')||'sin-numero'}-${RindePdf.slug(person)}-${today()}.pdf`;}
+  if(res.blob){pdfUrl=URL.createObjectURL(res.blob);pdfName=`rendicion-${RindePdf.slug(meta.number||'')||'sin-numero'}-${RindePdf.slug(data.person)}-${today()}.pdf`;}
  }
- // iPhone/iPad descargan un solo archivo por toque: el segundo reemplaza al primero.
+ /* iPhone/iPad bajan un solo archivo por toque (el segundo reemplaza al primero): ahí el botón descarga un único PDF
+    con la rendición y las boletas. En Android y computador descarga el Excel y el PDF en el mismo momento. */
  const oneAtATime=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
- function savePdf(){if(!pdfUrl)return;const a=document.createElement('a');a.href=pdfUrl;a.download=pdfName;document.body.append(a);a.click();a.remove();}
- function showPdfLink(){const a=$('excelPdfSave');if(!pdfUrl){a.hidden=true;return;}a.href=pdfUrl;a.download=pdfName;a.hidden=false;}
- function clearFile(){if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=null;if(pdfUrl)URL.revokeObjectURL(pdfUrl);pdfUrl=null;pdfName='';pdfNote='';prepared=null;committed=false;$('excelSave').hidden=true;$('excelSave').removeAttribute('href');$('excelPdfSave').hidden=true;$('excelPdfSave').removeAttribute('href');}
+ const mainIsPdf=()=>oneAtATime&&!!pdfUrl;
+ function saveFile(url,name){if(!url)return;const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();}
+ // Botón principal y, ya pagado, un botón secundario con el otro archivo por si hace falta.
+ function setLinks(){const main=$('excelSave'),alt=$('excelPdfSave');if(mainIsPdf()){main.href=pdfUrl;main.download=pdfName;alt.href=fileUrl;alt.download=excelName;alt.textContent='↓ Descargar también el Excel';}else{main.href=fileUrl;main.download=excelName;if(pdfUrl){alt.href=pdfUrl;alt.download=pdfName;alt.textContent='↓ Descargar solo el PDF';}}main.hidden=false;alt.hidden=!committed||!pdfUrl;}
+ function clearFile(){if(fileUrl)URL.revokeObjectURL(fileUrl);fileUrl=null;excelName='';if(pdfUrl)URL.revokeObjectURL(pdfUrl);pdfUrl=null;pdfName='';pdfNote='';prepared=null;committed=false;$('excelSave').hidden=true;$('excelSave').removeAttribute('href');$('excelPdfSave').hidden=true;$('excelPdfSave').removeAttribute('href');}
  function lock(value){dialog.querySelectorAll('input,select').forEach(el=>el.disabled=value);headerPanel.querySelectorAll('input,select').forEach(el=>el.disabled=value);}
  function reset(){exportEpoch++;snapshot=null;clearFile();lock(false);$('excelRows').replaceChildren();$('excelForm').reset();$('excelSummary').textContent='';$('excelError').textContent='';working=false;paying=false;$('excelClose').disabled=false;$('excelPrepare').disabled=false;$('excelPrepare').hidden=false;}
  dialog.addEventListener('cancel',e=>{if(paying)e.preventDefault();});
@@ -57,18 +61,18 @@
    const paymentId=newId();const wb=await RindeExcel.build(window.ExcelJS,{...data,status:'Pagado',paymentId},meta,choices);const buffer=await wb.xlsx.writeBuffer();
    if(epoch!==exportEpoch||session!==sessionEpoch)return;
    const excelUrl=URL.createObjectURL(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-   await preparePdf(data.receipts,meta,data.person,epoch);
+   await preparePdf({data:{...data,status:'Pagado',paymentId},meta,choices},epoch);
    if(epoch!==exportEpoch||session!==sessionEpoch){URL.revokeObjectURL(excelUrl);return;}
-   fileUrl=excelUrl;
+   fileUrl=excelUrl;excelName=`rendicion-pagada-${data.person.replace(/[^\p{L}\d]+/gu,'-')}-${today()}.xlsx`;
    prepared={id:paymentId,person:data.person,budgetSeen:data.budget,ids:data.receipts.map(r=>r.id),expected:data.receipts.map(r=>[r.id,r.date,r.number,r.merchant,r.category,r.amount]),meta,choices};
-   const link=$('excelSave');link.href=fileUrl;link.download=`rendicion-pagada-${data.person.replace(/[^\p{L}\d]+/gu,'-')}-${today()}.xlsx`;link.textContent=pdfUrl&&!oneAtATime?'↓ Descargar Excel + boletas y marcar pagado':'↓ Descargar Excel y marcar pagado';link.hidden=false;link.focus();$('excelError').textContent=pdfNote+' Al pulsar Descargar, estas boletas pasarán a Pagado y tu fondo quedará en cero. Se conservará una copia en el historial.'+(oneAtATime&&pdfUrl?' En iPhone se baja primero el Excel y luego aparece el botón del PDF.':'');
+   setLinks();const link=$('excelSave');link.textContent=mainIsPdf()?'↓ Descargar PDF y marcar pagado':pdfUrl?'↓ Descargar Excel + PDF y marcar pagado':'↓ Descargar Excel y marcar pagado';link.focus();$('excelError').textContent=pdfNote+' Al pulsar Descargar, estas boletas pasarán a Pagado y tu fondo quedará en cero. Se conservará una copia en el historial.'+(mainIsPdf()?' En iPhone se descarga un solo PDF con la rendición y las boletas.':'');
   }catch(err){if(epoch===exportEpoch)$('excelError').textContent=err.message||'No se pudo generar el Excel. Intenta nuevamente.';}
   finally{if(epoch===exportEpoch){working=false;lock(false);$('excelPrepare').disabled=false;}}
  };
  $('excelSave').onclick=async e=>{
-  // Ya pagado: el enlace descarga el Excel y, a continuación, el PDF de boletas.
-  if(committed){if(!oneAtATime)setTimeout(savePdf,800);return;}e.preventDefault();if(paying||!prepared)return;paying=true;working=true;lock(true);setSaving(true);$('excelClose').disabled=true;$('excelPrepare').disabled=true;$('excelError').textContent='Registrando el pago antes de descargar…';const epoch=exportEpoch,session=sessionEpoch;
-  try{const next=await rpc('payExport',prepared);if(epoch!==exportEpoch||session!==sessionEpoch)return;state=next;committed=true;render();$('excelPrepare').hidden=true;$('excelSave').textContent='↓ Volver a descargar Excel';showPdfLink();$('excelError').textContent='Pagado. Fondo en cero. '+(!pdfUrl?'':oneAtATime?'Se descargó el Excel. En iPhone se baja un archivo a la vez: ahora toca “Descargar PDF de boletas”. ':'Se descargan el Excel y el PDF de boletas; si el navegador pregunta, permite descargar varios archivos. ')+'Si algún archivo no se abrió, vuelve a tocar su botón. También está en Rendiciones pagadas.';$('excelSave').click();}
+  // Ya pagado: el enlace descarga su archivo y, fuera de iPhone, también el PDF en el mismo momento.
+  if(committed){if(!mainIsPdf()&&pdfUrl)setTimeout(()=>saveFile(pdfUrl,pdfName),800);return;}e.preventDefault();if(paying||!prepared)return;paying=true;working=true;lock(true);setSaving(true);$('excelClose').disabled=true;$('excelPrepare').disabled=true;$('excelError').textContent='Registrando el pago antes de descargar…';const epoch=exportEpoch,session=sessionEpoch;
+  try{const next=await rpc('payExport',prepared);if(epoch!==exportEpoch||session!==sessionEpoch)return;state=next;committed=true;render();$('excelPrepare').hidden=true;setLinks();$('excelSave').textContent=mainIsPdf()?'↓ Volver a descargar PDF':pdfUrl?'↓ Volver a descargar Excel y PDF':'↓ Volver a descargar Excel';$('excelError').textContent='Pagado. Fondo en cero. '+(mainIsPdf()?'Se descargó el PDF con la rendición y las boletas. ':pdfUrl?'Se descargan el Excel y el PDF (rendición + boletas); si el navegador pregunta, permite descargar varios archivos. ':'')+'Si algún archivo no se abrió, vuelve a tocar su botón. También está en Rendiciones pagadas.';$('excelSave').click();}
   catch(err){if(epoch===exportEpoch)$('excelError').textContent=err.message+' Puedes reintentar con este mismo botón. Si el pago ya quedó registrado, no se repetirá.';}
   finally{if(epoch===exportEpoch){paying=false;working=false;$('excelClose').disabled=false;}setSaving(false);}
  };
@@ -76,8 +80,8 @@
   reset();dialog.showModal();$('excelPrepare').hidden=true;working=true;$('legacyCategoryNote').hidden=true;$('excelError').textContent='Recuperando Excel pagado…';const epoch=exportEpoch,session=sessionEpoch;
   try{const data=await rpc('getPaidExport',{id});await loadScript('vendor/exceljs-4.4.0.min.js',()=>!!window.ExcelJS);const wb=await RindeExcel.build(window.ExcelJS,{...data,status:'Pagado'},data.meta,data.choices);const buffer=await wb.xlsx.writeBuffer();if(epoch!==exportEpoch||session!==sessionEpoch)return;
    const excelUrl=URL.createObjectURL(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-   await preparePdf(data.receipts,data.meta||{},data.person,epoch);if(epoch!==exportEpoch||session!==sessionEpoch){URL.revokeObjectURL(excelUrl);return;}
-   fileUrl=excelUrl;committed=true;const link=$('excelSave');link.href=fileUrl;link.download='rendicion-pagada-'+id+'.xlsx';link.textContent=pdfUrl&&!oneAtATime?'↓ Descargar copia: Excel + boletas':'↓ Descargar copia del Excel';link.hidden=false;showPdfLink();$('excelSummary').textContent=data.person+' · Pagado';$('excelError').textContent=pdfNote+' Esta es una copia del pago registrado. No cambia tu fondo ni vuelve a pagar las boletas.';
+   await preparePdf({data:{...data,status:'Pagado'},meta:data.meta||{},choices:data.choices},epoch);if(epoch!==exportEpoch||session!==sessionEpoch){URL.revokeObjectURL(excelUrl);return;}
+   fileUrl=excelUrl;excelName='rendicion-pagada-'+id+'.xlsx';committed=true;setLinks();$('excelSave').textContent=mainIsPdf()?'↓ Descargar copia en PDF':pdfUrl?'↓ Descargar copia: Excel + PDF':'↓ Descargar copia del Excel';$('excelSummary').textContent=data.person+' · Pagado';$('excelError').textContent=pdfNote+' Esta es una copia del pago registrado. No cambia tu fondo ni vuelve a pagar las boletas.';
   }catch(err){if(epoch===exportEpoch)$('excelError').textContent=err.message;}finally{if(epoch===exportEpoch)working=false;}
  }
 })();
