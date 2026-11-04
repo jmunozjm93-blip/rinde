@@ -40,10 +40,17 @@ async function build(ExcelJS,data,meta,choices){
   for(let col=2;col<=14;col++){const c=ws.getCell(row,col);c.font={name:'Arial',size:10};c.alignment={vertical:'middle',wrapText:true};}
  }
  merge('E4:I4','COMERCIAL DEPOR LTDA.');ws.getCell('E4').font={name:'Arial',size:15,bold:true};ws.getCell('E4').alignment={horizontal:'center',vertical:'middle'};
- const heads=[['J2','N.º de Rendición:','number'],['J3','Periodo:','period'],['J4','Centro de costo:','costCenter'],['J5','Marca:','brand'],['J6','Canal:','channel'],['J7','Sucursal:','branch'],['J8','Código SAP:','sap']];
- for(const [a,label,key]of heads){cell(a,label).font={name:'Arial',size:10,bold:true};merge(`K${a.slice(1)}:M${a.slice(1)}`,String(meta[key]||''));}
- merge('B5:D5','Marque con una cruz:');cell('B6',meta.type==='Reembolso'?'X':'');merge('C6:D6','Reembolso');cell('B8',meta.type==='Fondo por rendir'?'X':'');cell('C8','Fondo x rendir');
- merge('D8:E8','Cheque N.º: '+(meta.check||''));merge('F8:G8','Banco: '+(meta.bank||''));cell('H8','Monto $');cell('I8',data.budget).numFmt='"$"#,##0';
+ // Encabezado: solo se muestran los campos con dato, en filas consecutivas desde la 2.
+ const val=k=>String(meta[k]||'').trim();
+ const heads=[['N.º de Rendición:','number'],['Periodo:','period'],['Centro de costo:','costCenter'],['Marca:','brand'],['Canal:','channel'],['Sucursal:','branch'],['Código SAP:','sap']].filter(([,k])=>val(k));
+ heads.forEach(([label,key],i)=>{const row=2+i;cell('J'+row,label).font={name:'Arial',size:10,bold:true};merge(`K${row}:M${row}`,val(key));for(const col of 'KLM')ws.getCell(col+row).border={top:thin,left:thin,right:thin,bottom:thin};});
+ const box=a=>{const c=ws.getCell(a);c.border={top:thin,left:thin,right:thin,bottom:thin};c.alignment={horizontal:'center',vertical:'middle'};c.font={name:'Arial',size:10,bold:true};};
+ merge('B5:D5','Marque con una cruz:');ws.getCell('B5').font={name:'Arial',size:10,bold:true,underline:true};
+ cell('B6',meta.type==='Reembolso'?'X':'');box('B6');merge('C6:D6','Reembolso');ws.getCell('C6').font={name:'Arial',size:10,bold:true};
+ cell('B8',meta.type==='Fondo por rendir'?'X':'');box('B8');cell('C8','Fondo x rendir').font={name:'Arial',size:10,bold:true};
+ if(val('check'))merge('D8:E8','Cheque N.º: '+val('check'));
+ if(val('bank'))merge('F8:G8','Banco: '+val('bank'));
+ if(data.budget>0){cell('H8','Monto $').font={name:'Arial',size:10,bold:true};cell('I8',data.budget).numFmt='"$"#,##0';}
  merge('B9:I9','Rendido por: '+data.person);if(data.paymentId)merge('J9:N9','Pago: '+data.paymentId);
  ['N.º','N.º Documento','Fecha','Descripción de Gasto'].forEach((v,i)=>merge(`${String.fromCharCode(66+i)}10:${String.fromCharCode(66+i)}12`,v));
  categories.forEach((cat,i)=>cat.forEach((v,j)=>cell(`${String.fromCharCode(70+i)}${10+j}`,v)));
