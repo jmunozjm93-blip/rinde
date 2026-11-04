@@ -7,7 +7,7 @@ function paidGroups_(rows){
 function paidExport_(book,user,arg){
  const id=text_(arg&&arg.id,100),rows=rows_(receipts_(book)).filter(r=>r[9]==='Pagado'&&String(r[10])===id);if(!rows.length)throw Error('No se encontró la rendición pagada.');
  const person=target_(user,String(rows[0][2]),false);if(rows.some(r=>String(r[2])!==person))throw Error('Lote inválido.');const saved=JSON.parse(String(rows[0][13]));
- return {person,budget:saved.budget,meta:saved.meta,paymentId:id,paidAt:String(rows[0][11]),choices:rows.map(r=>Number(r[12])),receipts:rows.map(r=>({id:String(r[0]),person,number:String(r[4]),date:date_(r[3]),merchant:String(r[5]),category:String(r[6]),amount:Number(r[7]),status:'Pagado'}))};
+ return {person,budget:saved.budget,meta:saved.meta,paymentId:id,paidAt:String(rows[0][11]),choices:rows.map(r=>Number(r[12])),receipts:rows.map(r=>({id:String(r[0]),person,number:String(r[4]),date:date_(r[3]),merchant:String(r[5]),category:String(r[6]),amount:Number(r[7]),photoUrl:String(r[8]||''),status:'Pagado'}))};
 }
 function payExport_(arg,user){
  if(!arg||!Array.isArray(arg.ids)||!arg.ids.length||arg.ids.length>10000||new Set(arg.ids).size!==arg.ids.length)throw Error('Selección inválida.');
@@ -92,9 +92,9 @@ function setBudget(arg,user){
  if(!Number.isSafeInteger(amount)||amount<=0||amount>100000000000)throw Error('Monto de fondo inválido.');
  return locked_(()=>{const book=book_(),sheet=book.getSheetByName('Fondos'),rows=sheet.getRange(2,1,sheet.getLastRow()-1,2).getValues(),i=rows.findIndex(r=>r[0]===person);if(i<0)throw Error('No se encontró el fondo personal.');sheet.getRange(i+2,2,1,2).setValues([[amount,new Date(Math.max(Date.now(),lastPaid_(book,person)+1)).toISOString()]]);SpreadsheetApp.flush();return state_(book,user,person);});
 }
-function ownRow_(book,user,id){text_(id,100);const rows=rows_(receipts_(book)),index=rows.findIndex(r=>String(r[0])===id&&r[9]==='Vigente');if(index<0)throw Error('No se encontró la boleta.');target_(user,String(rows[index][2]),false);return {row:rows[index],index};}
+function ownRow_(book,user,id,statuses){text_(id,100);const allowed=statuses||['Vigente'],rows=rows_(receipts_(book)),index=rows.findIndex(r=>String(r[0])===id&&allowed.includes(r[9]));if(index<0)throw Error('No se encontró la boleta.');target_(user,String(rows[index][2]),false);return {row:rows[index],index};}
 function removeReceipt(arg,user){if(!arg)throw Error('Falta la boleta.');return locked_(()=>{const book=book_(),found=ownRow_(book,user,arg.id),person=target_(user,arg.person,true);receipts_(book).getRange(found.index+2,10).setValue('Anulada');SpreadsheetApp.flush();return state_(book,user,person);});}
-function getPhoto_(arg,user){const book=book_(),found=ownRow_(book,user,arg&&arg.id),url=String(found.row[8]);const match=url.match(/\/d\/([A-Za-z0-9_-]+)/)||url.match(/[?&]id=([A-Za-z0-9_-]+)/);if(!match)throw Error('Esta boleta no tiene foto.');const blob=DriveApp.getFileById(match[1]).getBlob();if(blob.getContentType()!=='image/jpeg')throw Error('Formato de foto no compatible.');return {mimeType:'image/jpeg',data:Utilities.base64Encode(blob.getBytes())};}
+function getPhoto_(arg,user){const book=book_(),found=ownRow_(book,user,arg&&arg.id,['Vigente','Pagado']),url=String(found.row[8]);const match=url.match(/\/d\/([A-Za-z0-9_-]+)/)||url.match(/[?&]id=([A-Za-z0-9_-]+)/);if(!match)throw Error('Esta boleta no tiene foto.');const blob=DriveApp.getFileById(match[1]).getBlob();if(blob.getContentType()!=='image/jpeg')throw Error('Formato de foto no compatible.');return {mimeType:'image/jpeg',data:Utilities.base64Encode(blob.getBytes())};}
 function text_(value,max){if(typeof value!=='string'||!value.trim()||value.length>max)throw Error('Los datos de la boleta son inválidos.');return value.trim();}
 function safe_(value){return /^[\s]*[=+\-@]/.test(value)?"'"+value:value;}
 function blob_(attachment){
