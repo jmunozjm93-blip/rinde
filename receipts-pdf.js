@@ -28,12 +28,12 @@
   doc.text('Rendido por: '+data.person,M,listTop);
   if(data.paymentId){doc.setFont('helvetica','normal');doc.setFontSize(7);doc.text('Pago: '+data.paymentId,W-M,listTop,{align:'right'});}
   const cats=RindeExcel.categories,totals=Array(7).fill(0);
-  const body=data.receipts.map((r,i)=>{const row=Array(7).fill('');row[choices[i]]=num(r.amount);totals[choices[i]]+=r.amount;return [String(i+1),String(r.number),dmy(r.date),String(r.merchant),...row,num(r.amount),data.status==='Pagado'?'Pagado':'Pendiente'];});
-  const total=totals.reduce((a,b)=>a+b,0),catStyle={cellWidth:19,halign:'right'},columnStyles={0:{cellWidth:8,halign:'center'},1:{cellWidth:20},2:{cellWidth:18},3:{cellWidth:'auto'},11:{cellWidth:20,halign:'right'},12:{cellWidth:16,halign:'center'}};
+  const body=data.receipts.map((r,i)=>{const row=Array(7).fill('');row[choices[i]]=num(r.amount);totals[choices[i]]+=r.amount;return [String(i+1),String(r.number),dmy(r.date),String(r.merchant),...row,num(r.amount)];});
+  const total=totals.reduce((a,b)=>a+b,0),catStyle={cellWidth:19,halign:'right'},columnStyles={0:{cellWidth:8,halign:'center'},1:{cellWidth:20},2:{cellWidth:18},3:{cellWidth:'auto'},11:{cellWidth:20,halign:'right'}};
   for(let c=4;c<=10;c++)columnStyles[c]=catStyle;
   doc.autoTable({startY:listTop+4,margin:{left:M,right:M,top:15,bottom:15},theme:'grid',showFoot:'lastPage',
-   head:[['N.º','N.º Documento','Fecha','Descripción de Gasto',...cats.map(c=>c[0]+' '+c[1]+(c[2]?'\n'+c[2]:'')),'Monto $','Estado']],
-   body,foot:[[{content:'TOTAL RENDIDO',colSpan:4},...totals.map(num),num(total),'']],
+   head:[['N.º','N.º Documento','Fecha','Descripción de Gasto',...cats.map(c=>c[0]+' '+c[1]+(c[2]?'\n'+c[2]:'')),'Monto $']],
+   body,foot:[[{content:'TOTAL RENDIDO',colSpan:4},...totals.map(num),num(total)]],
    styles:{font:'helvetica',fontSize:7.5,cellPadding:1.2,lineColor:[34,34,34],lineWidth:.2,textColor:20,valign:'middle',overflow:'linebreak'},
    headStyles:{fillColor:[233,233,233],textColor:20,fontStyle:'bold',halign:'center',fontSize:6.5},
    footStyles:{fillColor:[255,255,255],textColor:20,fontStyle:'bold',halign:'right'},columnStyles});
